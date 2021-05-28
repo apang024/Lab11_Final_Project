@@ -55,47 +55,18 @@ int Demo_Tick(int state) {
     return state;
 }
 
-enum setNumPadStates { setB };
-
-int setBUsingNumPad(int state) {
-    unsigned char x;
-    switch (state) {
-	case setB:
-	    state = setB;
-	    break;
-   	default:
-	    state = setB;
-	    break;
-    }
-    switch (state) {
-	case setB:
-    	    x = GetKeypadKey();
-	    PORTB = (x == '\0') ? 0x01 : 0x02;
-	    break;
-	default:
-	    break;
-    }
-    return state;
-}
-
 int main(void) {
-    DDRA = 0x00; PORTA = 0xFF;		// PORTA: KEYPAD all input
-    DDRB = 0x3F; PORTB = 0xC0;		// PORTB: B7-B6 = input, B5-B0 = output
-    DDRC = 0xFF; PORTC = 0x00;		// PORTC: MATRIX COLUMNS all output
-    DDRD = 0xFF; PORTD = 0x00;		// PORTD: MATRIX ROWS all output
+    DDRC = 0xFF; PORTC = 0x00;
+    DDRD = 0xFF; PORTD = 0x00;
 
-    static task task1, task2;
-    task* tasks[] = { &task1, &task2 };
+    static task task1;
+    task* tasks[] = { &task1 };
     const unsigned short numTasks = sizeof(tasks)/sizeof(task*);
     const char start = -1;
     task1.state = start;
     task1.period = 100;
     task1.elapsedTime = task1.period;
     task1.TickFct = &Demo_Tick;
-    task2.state = start;
-    task2.period = 10;
-    task2.elapsedTime = task2.period;
-    task2.TickFct = &setBUsingNumPad;
 
     unsigned short i;
     unsigned long GCD = tasks[0]->period;
