@@ -13,6 +13,8 @@
 #include "keypad.h"
 #include "scheduler.h"
 #include "timer.h"
+#include <stdio.h>
+#include <stdlib.h>
 #endif
 
 void set_PWM(double frequency) {
@@ -66,24 +68,41 @@ unsigned char array_star[8] = { 0x00, 0x92, 0x54, 0x38, 0xFE, 0x38, 0x54, 0x92 }
 unsigned char array_pound[8] = { 0x24, 0x24, 0xFF, 0x24, 0x24, 0xFF, 0x24, 0x24 };	// 15
 unsigned char array_play[8] = { 0xE8, 0xA8, 0xEE, 0x80, 0x25, 0x55, 0x72, 0x52 };	// 17
 unsigned char array_swoosh[8] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };	// 18
+unsigned char array_smile[8] = { 0x00, 0x24, 0x24, 0x24, 0x00, 0x42, 0x3C, 0x00 };	// 19
+unsigned char array_frown[8] = { 0x00, 0x24, 0x24, 0x24, 0x00, 0x3C, 0x42, 0x00 };	// 20
 
 int LED_Red_Blink = 0;
 int LED_Green = 0;
 int LED_Flash = 0;
+int button = 0;
+int read_input = 0;
 unsigned char tempBlink = 0x00;
 unsigned char tempBlink1 = 0x00;
 unsigned char tempBlink2 = 0x00;
 
-enum numPadStates { numPadS1 };
+enum numPadStates { numPadS1, wait_Read };
 
 int getNumPadInput(int state) {
     unsigned char x;
     switch (state) {
 	case numPadS1:
-	    state = numPadS1;
+	    if (read_input) {
+	    	state = numPadS1;
+	    }
+	    else {
+	    	state = wait_Read;
+	    }
 	    break;
+	case wait_Read:
+            if (read_input) {
+                state = numPadS1;
+            }
+            else {
+                state = wait_Read;
+            }
+            break;
 	default:
-	    state = numPadS1;
+	    state = wait_Read;
 	    break;
     }
     switch (state) {
@@ -110,6 +129,7 @@ int getNumPadInput(int state) {
         	default:  arrayNum = 16; break;       // array_ALL0
 	    }
             break;
+	case wait_Read: break;
         default:
             break;
     }
@@ -145,6 +165,8 @@ int LEDMatrix(int state) {
         case 16: for(unsigned int j = 0; j < 8; j++) { currArray[j] = array_ALL0[j]; } break;
         case 17: for(unsigned int j = 0; j < 8; j++) { currArray[j] = array_play[j]; } break;
         case 18: for(unsigned int j = 0; j < 8; j++) { currArray[j] = array_swoosh[j]; } break;
+	case 19: for(unsigned int j = 0; j < 8; j++) { currArray[j] = array_smile[j]; } break;
+	case 20: for(unsigned int j = 0; j < 8; j++) { currArray[j] = array_frown[j]; } break;
 	default: for(unsigned int j = 0; j < 8; j++) { currArray[j] = array_ALL0[j]; } break;
     }
 
@@ -267,8 +289,8 @@ int buttonSM (int state) {
 	default: state = button_release; break;
     }
     switch(state) {
-        case button_press: break;
-        case button_release: break;
+        case button_press: button = 0; break;
+        case button_release: button = 1; break;
         default: break;
     }
     return state;
@@ -307,6 +329,8 @@ int flash_lights(int state) {
 	    PORTB = (PORTB & 0xC0) | tempBlink | tempBlink1 | tempBlink2;
 	    break;
 	case wait:
+	    tempBlink2 = 0x00;
+	    PORTB = (PORTB & 0xC0) | tempBlink | tempBlink1 | tempBlink2;
 	    break;
 	default: break;
     }
@@ -316,13 +340,12 @@ int flash_lights(int state) {
 enum buzzerStates { waitC, play_C };
 
 int buzzer(int state) {
-    unsigned char tmpB7 = ~PINB & 0x80;
-    static unsigned int cnt = 6;
+    static unsigned int cnt = 10;
 
     // Transitions
     switch (state) {
 	case waitC:
-	    if (tmpB7 && cnt > 0) {
+	    if (button && cnt > 0) {
 	    	state = play_C;
 	    }
 	    else {
@@ -330,7 +353,7 @@ int buzzer(int state) {
 	    }
 	    break;
 	case play_C:
-	    if (tmpB7 && cnt > 0) {
+	    if (cnt > 0) {
 	    	state = play_C;
 	    }
 	    else {
@@ -342,12 +365,142 @@ int buzzer(int state) {
     // Actions
     switch (state) {
         case waitC:
-	    if (!tmpB7) { cnt = 6; }
+	    if (!button) { cnt = 10; }
 	    set_PWM(0);
             break;
         case play_C:
 	    set_PWM(261.63);
-	    cnt++;
+	    cnt--;
+            break;
+	default: break;
+    }
+    return state;
+}
+
+enum GameStates { start, wait1, play, LED_off, read, read_wait, correctInput, wrongInput, WIN, reset_wait };
+unsigned char array_memory[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+int gameSM(int state) {
+    static unsigned int cnt = 3;
+    static unsigned int k = 0; 
+    unsigned int y = 0;
+    // Transitions
+    switch (state) {
+    	case start:
+	    if (button) { state = wait1; }
+	    else { state = start; }
+	    break;
+	case wait1:
+	    if (button || cnt > 0) { state = wait1; }
+            else { state = play; }
+	    break;
+	case play:
+	    if (button) { state = reset_wait; }
+            else { state = LED_off; }
+	    break;
+	case LED_off:
+	    if (button) { state = reset_wait; }
+            else if (k < 6) { 
+		k++;	// Mealy Transition
+		state = play; 
+	    }
+	    else { 
+	    	k = 0;
+		state = read;
+	    }
+	    break;
+	case read:
+	    if (button) { state = reset_wait; }
+	    else if (arrayNum != 16) {			// Check for input
+	    	state = read_wait;
+	    }
+	    else { state = read; }
+	    break;
+	case read_wait:
+	    if (button) { state = reset_wait; }
+	    else if (arrayNum != 16) { state = read_wait; }
+	    else if (arrayNum == 16 && y == array_memory[k]) { // Stop pressing keypad
+	    	LED_Green++;		// Correct increase Green
+		state = correctInput;
+	    }
+	    else { state = wrongInput; }
+	    break;
+	case correctInput:
+	    if (button) { state = reset_wait; }
+	    else if (k < 5) {
+		k++;			// Mealy Action
+	    	state = read;
+	    }
+	    else {			// K >= 5
+	    	read_input = 0;		// Mealy Action
+		state = WIN;
+	    }
+	    break;
+	case wrongInput:
+	    if (button) { state = reset_wait; }
+	    else {
+	    	read_input = 0;
+		state = wrongInput;
+	    }
+	    break;
+	case WIN:
+	    if (button) { state = reset_wait; }
+	    else { state = WIN; }
+	    break;
+	case reset_wait:
+	    if (button) { state = reset_wait; }
+            else { state = start; }
+	    break;
+	default: state = start; break;
+    }
+    // Actions
+    switch (state) {
+        case start:
+	    cnt = 3;
+	    arrayNum = 17;	// 17 - ARR_PLAY
+	    LED_Flash = 1;
+	    read_input = 0;
+	    LED_Green = 0;
+	    LED_Red_Blink = 0;
+            break;
+        case wait1:
+	    k = 0;
+	    cnt--;
+	    arrayNum = 18;
+	    LED_Flash = 0;
+	    read_input = 0;
+            LED_Green = 0;
+            LED_Red_Blink = 0;
+            break;
+        case play:
+	    arrayNum = rand() % 16;	// Any number from 0 to 15
+	    array_memory[k] = arrayNum;
+	    LED_Red_Blink = 1;
+            break;
+        case LED_off:
+	    arrayNum = 16;		// Turn off display
+            break;
+        case read:
+	    read_input = 1;
+	    LED_Red_Blink = 0;
+	    y = arrayNum;
+            break;
+        case read_wait:
+            break;
+        case correctInput:
+            break;
+        case wrongInput:
+	    read_input = 0;
+	    arrayNum = 20;		// :(
+	    LED_Red_Blink = 1;
+            break;
+        case WIN:
+	    read_input = 0;
+	    arrayNum = 19;		// :)
+            break;
+        case reset_wait:
+	    read_input = 0;
+	    LED_Red_Blink = 0;
             break;
 	default: break;
     }
@@ -360,8 +513,8 @@ int main(void) {
     DDRC = 0xFF; PORTC = 0x00;		// PORTC: MATRIX COLUMNS all output
     DDRD = 0xFF; PORTD = 0x00;		// PORTD: MATRIX ROWS all output
 
-    static task task1, task2, task3, task4, task5, task6, task7;
-    task* tasks[] = { &task1, &task2, &task3, &task4, &task5, &task6, &task7 };
+    static task task1, task2, task3, task4, task5, task6, task7, task8;
+    task* tasks[] = { &task1, &task2, &task3, &task4, &task5, &task6, &task7, &task8 };
     const unsigned short numTasks = sizeof(tasks)/sizeof(task*);
     const char start = -1;
     task1.state = start;
@@ -373,7 +526,7 @@ int main(void) {
     task2.elapsedTime = task2.period;
     task2.TickFct = &LEDMatrix;
     task3.state = start;
-    task3.period = 500;
+    task3.period = 250;
     task3.elapsedTime = task3.period;
     task3.TickFct = &LED_Red_BlinkSM;
     task4.state = start;
@@ -390,9 +543,13 @@ int main(void) {
     task6.TickFct = &flash_lights;
     task7.state = start;
     task7.period = 100;
-    task7.elapsedTime = task6.period;
+    task7.elapsedTime = task7.period;
     task7.TickFct = &buzzer;
-
+    task8.state = start;
+    task8.period = 500;
+    task8.elapsedTime = task8.period;
+    task8.TickFct = &gameSM;
+    
     unsigned short i;
     unsigned long GCD = tasks[0]->period;
     for( i = 1; i < numTasks; i++) {
