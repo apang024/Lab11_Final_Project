@@ -321,7 +321,7 @@ int buzzer(int state) {
     // Transitions
     switch (state) {
 	case waitC:
-	    if (tmpB7 && cnt > 0) {
+	    if (tmpB7 && cnt != 0) {
 	    	state = play_C;
 	    }
 	    else {
@@ -329,7 +329,7 @@ int buzzer(int state) {
 	    }
 	    break;
 	case play_C:
-	    if (tmpB7 && cnt > 0) {
+	    if (tmpB7 && cnt != 0) {
 	    	state = play_C;
 	    }
 	    else {
@@ -355,7 +355,7 @@ int buzzer(int state) {
 
 int main(void) {
     DDRA = 0xF0; PORTA = 0x0F;		// PORTA: KEYPAD all input
-    DDRB = 0x7F; PORTB = 0x80;		// PORTB: B7-B6 = input, B5-B0 = output
+    DDRB = 0x3F; PORTB = 0xC0;		// PORTB: B7-B6 = input, B5-B0 = output
     DDRC = 0xFF; PORTC = 0x00;		// PORTC: MATRIX COLUMNS all output
     DDRD = 0xFF; PORTD = 0x00;		// PORTD: MATRIX ROWS all output
 
@@ -387,10 +387,10 @@ int main(void) {
     task6.period = 500;
     task6.elapsedTime = task6.period;
     task6.TickFct = &flash_lights;
-    task7.state = start;
-    task7.period = 100;
-    task7.elapsedTime = task6.period;
-    task7.TickFct = &buzzer;
+    task6.state = start;
+    task6.period = 100;
+    task6.elapsedTime = task6.period;
+    task6.TickFct = &buzzer;
 
     unsigned short i;
     unsigned long GCD = tasks[0]->period;
@@ -400,7 +400,6 @@ int main(void) {
 
     TimerSet(GCD);
     TimerOn();
-    PWM_on();
 
     while(1) {
     	for (i = 0; i < numTasks; i++) {
