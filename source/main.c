@@ -14,87 +14,59 @@
 #include "timer.h"
 #endif
 
-unsigned int arrayNum = 16;
-unsigned char array_ALL0[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-unsigned char array_0[] = { 0x3C, 0x42, 0x46, 0x4A, 0x52, 0x62, 0x42, 0x3C };
-unsigned char array_1[] = { 0x08, 0x18, 0x28, 0x08, 0x08, 0x08, 0x08, 0x3C };
-unsigned char array_2[] = { 0x38, 0x44, 0x44, 0x04, 0x7C, 0x40, 0x40, 0x7C };
-unsigned char array_3[] = { 0x3C, 0x04, 0x04, 0x04, 0x3C, 0x04, 0x04, 0x3C };
-unsigned char array_4[] = {  };
-unsigned char array_5[] = {  };
-unsigned char array_6[] = {  };
-unsigned char array_7[] = {  };
-unsigned char array_8[] = {  };
-unsigned char array_9[] = {  };
-unsigned char array_A[] = {  };
-unsigned char array_B[] = {  };
-unsigned char array_C[] = {  };
-unsigned char array_D[] = {  };
-unsigned char array_star[] = {  };
-unsigned char array_pound[] = {  };
-unsigned char array_play[] = {  };
-unsigned char array_swoosh[] = {  };
+//--------------------------------------
+// LED Matrix Demo SynchSM
+// Period: 100 ms
+//--------------------------------------
+enum Demo_States {shift};
+int Demo_Tick(int state) {
 
-enum numPadStates { numPadS1 };
-
-int getNumPadInput(int state) {
-    unsigned char x;
+    // Local Variables
+    static unsigned char pattern = 0x80;    // LED pattern - 0: LED off; 1: LED on
+    static unsigned char row = 0xFE;      // Row(s) displaying pattern.
+                            // 0: display pattern on row
+                            // 1: do NOT display pattern on row
+    // Transitions
     switch (state) {
-	case numPadS1:
-	    state = numPadS1;
+        case shift:
 	    break;
-	default:
-	    state = numPadS1;
-	    break;
+        default:
+	    state = shift;
+            break;
     }
+    // Actions
     switch (state) {
-        case numPadS1:
-            x = GetKeypadKey();
-	    switch (x) {
-	    	case '\0': arrayNum = 16; break;     // array_ALL0
-  		case '0':  arrayNum = 0; break;      // array_0
-    		case '1':  arrayNum = 1; break;      // array_1
-        	case '2':  arrayNum = 2; break;      // array_2
-        	case '3':  arrayNum = 3; break;      // array_3
-        	case '4':  arrayNum = 4; break;      // array_4
-        	case '5':  arrayNum = 5; break;      // array_5
-        	case '6':  arrayNum = 6; break;      // array_6
-        	case '7':  arrayNum = 7; break;      // array_7
-        	case '8':  arrayNum = 8; break;      // array_8
-        	case '9':  arrayNum = 9; break;      // array_9
-        	case 'A':  arrayNum = 10; break;      // array_A
-        	case 'B':  arrayNum = 11; break;      // array_B
-        	case 'C':  arrayNum = 12; break;      // array_C
-        	case 'D':  arrayNum = 13; break;      // array_D
-        	case '*':  arrayNum = 14; break;      // array_Star
-        	case '#':  arrayNum = 15; break;      // array_Pound
-        	default:  arrayNum = 16; break;       // array_ALL0
-	    }
+	case shift:
+	    if (row == 0x7F && pattern == 0x01) { // Reset demo
+                pattern = 0x80;
+                row = 0xFE;
+            } else if (pattern == 0x01) { // Move LED to start of next row
+                pattern = 0x80;
+                row = (row << 1) | 0x01;
+            } else { // Shift LED one spot to the right on current row
+                pattern >>= 1;
+            }
             break;
         default:
-            state = numPadS1;
-            break;
+    	break;
     }
+    PORTC = ~pattern;    // Pattern to display
+    PORTD = ~row;        // Row(s) displaying pattern
+    return state;
 }
 
 int main(void) {
-    DDRA = 0xF0; PORTA = 0x0F;		// PORTA: KEYPAD all input
-    DDRB = 0x3F; PORTB = 0xC0;		// PORTB: B7-B6 = input, B5-B0 = output
-    DDRC = 0xFF; PORTC = 0x00;		// PORTC: MATRIX COLUMNS all output
-    DDRD = 0xFF; PORTD = 0x00;		// PORTD: MATRIX ROWS all output
+    DDRC = 0xFF; PORTC = 0x00;
+    DDRD = 0xFF; PORTD = 0x00;
 
-    static task task1, task2;
-    task* tasks[] = { &task1, &task2 };
+    static task task1;
+    task* tasks[] = { &task1 };
     const unsigned short numTasks = sizeof(tasks)/sizeof(task*);
     const char start = -1;
     task1.state = start;
     task1.period = 100;
     task1.elapsedTime = task1.period;
-    task1.TickFct = &getNumPadInput;
-    task2.state = start;
-    task2.period = 10;
-    task2.elapsedTime = task2.period;
-    task2.TickFct = &setBUsingNumPad;
+    task1.TickFct = &Demo_Tick;
 
     unsigned short i;
     unsigned long GCD = tasks[0]->period;
